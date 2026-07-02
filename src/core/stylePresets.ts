@@ -8,14 +8,14 @@ export type StylePreset = {
 };
 
 export const STYLE_PRESETS: StylePreset[] = [
-  { id: "photoreal", label: "写实摄影", emoji: "📷", modifiers: "photorealistic, ultra detailed, 8k, natural lighting, sharp focus, depth of field" },
-  { id: "anime", label: "动漫二次元", emoji: "🎌", modifiers: "anime style, cel shading, vibrant colors, clean line art, studio anime" },
-  { id: "watercolor", label: "水彩", emoji: "🎨", modifiers: "watercolor painting, soft edges, flowing pigments, paper texture, delicate" },
-  { id: "cyberpunk", label: "赛博朋克", emoji: "🌃", modifiers: "cyberpunk, neon lights, futuristic, rain-soaked streets, blade runner aesthetic, cinematic" },
-  { id: "flat", label: "极简扁平", emoji: "⬜", modifiers: "flat design, minimal, clean shapes, vector style, simple background" },
-  { id: "oil", label: "油画", emoji: "🖼️", modifiers: "oil painting, visible brushstrokes, rich texture, classical lighting, canvas" },
-  { id: "3d", label: "3D 渲染", emoji: "🧊", modifiers: "3D render, octane render, cinematic lighting, volumetric, highly detailed, subsurface scattering" },
-  { id: "ink", label: "国风水墨", emoji: "🖌️", modifiers: "chinese ink painting, traditional, sumi-e, minimalist brushwork, rice paper, elegant" },
+  { id: "photoreal", label: "写实摄影", emoji: "📷", modifiers: "写实摄影风格，超高细节，8K 高清，自然光线，锐利对焦，景深效果" },
+  { id: "anime", label: "动漫二次元", emoji: "🎌", modifiers: "动漫风格，赛璐璐上色，鲜艳色彩，干净线稿，日系动画质感" },
+  { id: "watercolor", label: "水彩", emoji: "🎨", modifiers: "水彩画风格，柔和边缘，颜料晕染，纸张质感，细腻通透" },
+  { id: "cyberpunk", label: "赛博朋克", emoji: "🌃", modifiers: "赛博朋克风格，霓虹灯光，未来都市，雨夜街道，电影感，银翼杀手美学" },
+  { id: "flat", label: "极简扁平", emoji: "⬜", modifiers: "极简扁平设计，简洁形状，矢量风格，干净背景，现代感" },
+  { id: "oil", label: "油画", emoji: "🖼️", modifiers: "油画风格，可见笔触，丰富肌理，古典光影，画布质感" },
+  { id: "3d", label: "3D 渲染", emoji: "🧊", modifiers: "3D 渲染，辛烷渲染，电影级光照，体积光，超高细节，次表面散射" },
+  { id: "ink", label: "国风水墨", emoji: "🖌️", modifiers: "中国水墨画，传统国画，写意笔法，宣纸质感，留白意境，典雅" },
 ];
 
 export function findStylePreset(id: string): StylePreset | undefined {
