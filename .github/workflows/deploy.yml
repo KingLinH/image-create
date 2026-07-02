@@ -34,9 +34,6 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
-        with:
-          # 仓库尚未启用 Pages 时，自动启用并设为 GitHub Actions 部署源（需 pages: write 权限）
-          enablement: true
 
       - name: Build
         run: npm run build
