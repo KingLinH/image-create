@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { runBatchTasks, type BatchStatus, type BatchTask } from "@/core/batch";
 import { useConfigStore } from "@/stores/config";
 import { useHistoryStore } from "@/stores/history";
+import { useProjectsStore } from "@/stores/projects";
 import { buildOutputPath } from "@/core/fileNames";
 import { generateId, type ImageRecord } from "@/core/history";
 import { describeError } from "./useImageGeneration";
@@ -21,6 +22,7 @@ export type BatchMode = "same" | "custom" | "split";
 export function useBatch() {
   const configStore = useConfigStore();
   const historyStore = useHistoryStore();
+  const projectStore = useProjectsStore();
 
   const mode = ref<BatchMode>("same");
   const masterPrompt = ref("");
@@ -303,6 +305,7 @@ export function useBatch() {
           : "",
         durationMs: task.durationMs,
         errorMessage: succeeded ? undefined : task.errorMessage,
+        project: projectStore.current || undefined,
         batch: {
           ...batchCtx,
           taskId: task.id,

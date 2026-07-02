@@ -4,26 +4,37 @@ import { generateImages, optimizePrompt, type ParsedImage } from "@/core/api";
 import { ApiClientError } from "@/core/api";
 import { useConfigStore } from "@/stores/config";
 import { useHistoryStore } from "@/stores/history";
+import { useProjectsStore } from "@/stores/projects";
 import { buildOutputPath } from "@/core/fileNames";
 import { generateId, type ImageRecord } from "@/core/history";
 import { downloadImage } from "@/core/storage";
-import { composePrompt } from "@/core/stylePresets";
+import { resolveStyleModifiers } from "@/core/stylePresets";
+import { resolveCompositionModifiers } from "@/core/compositionPresets";
 
 export function useImageGeneration() {
   const configStore = useConfigStore();
   const historyStore = useHistoryStore();
+  const projectStore = useProjectsStore();
 
   const loading = ref(false);
   const optimizing = ref(false);
   const prompt = ref("");
   const optimizedPrompt = ref("");
   const activeStyles = ref<string[]>([]);
+  const activeComposition = ref<string[]>([]);
   const referenceImages = ref<File[]>([]);
   const images = ref<ParsedImage[]>([]);
   const errorMessage = ref("");
 
-  // 实际发送给模型的提示词 = 原始提示词 + 激活的风格修饰。
-  const effectivePrompt = computed(() => composePrompt(prompt.value, activeStyles.value));
+  // 实际发送给模型的提示词 = 原始提示词 + 风格修饰 + 构图修饰。
+  const effectivePrompt = computed(() => {
+    const parts = [
+      prompt.value.trim(),
+      ...resolveStyleModifiers(activeStyles.value),
+      ...resolveCompositionModifiers(activeComposition.value),
+    ];
+    return parts.filter(Boolean).join("，");
+  });
 
   async function optimize() {
     if (!prompt.value.trim()) {
@@ -82,6 +93,7 @@ export function useImageGeneration() {
           configStore.config.defaultFormat,
         ),
         durationMs: Date.now() - startedAt,
+        project: projectStore.current || undefined,
       };
       await historyStore.add(record, result[0]);
       ElMessage.success(`生成成功，共 ${result.length} 张。`);
@@ -99,6 +111,7 @@ export function useImageGeneration() {
         outputPath: "",
         durationMs: Date.now() - startedAt,
         errorMessage: errorMessage.value,
+        project: projectStore.current || undefined,
       };
       historyStore.add(record);
       ElMessage.error(errorMessage.value);
@@ -124,6 +137,7 @@ export function useImageGeneration() {
     prompt.value = "";
     optimizedPrompt.value = "";
     activeStyles.value = [];
+    activeComposition.value = [];
     referenceImages.value = [];
     images.value = [];
     errorMessage.value = "";
@@ -135,6 +149,7 @@ export function useImageGeneration() {
     prompt,
     optimizedPrompt,
     activeStyles,
+    activeComposition,
     effectivePrompt,
     referenceImages,
     images,

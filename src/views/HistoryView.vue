@@ -57,6 +57,17 @@ function statusType(status: string): "success" | "danger" | "info" {
   <div>
     <div class="panel head-bar">
       <p class="panel-title" style="margin-bottom: 0">历史记录（共 {{ historyStore.records.length }} 条）</p>
+      <el-select
+        :model-value="historyStore.projectFilter"
+        placeholder="按项目筛选"
+        clearable
+        size="small"
+        style="width: 180px"
+        :disabled="historyStore.projects.length === 0"
+        @change="historyStore.setProjectFilter"
+      >
+        <el-option v-for="p in historyStore.projects" :key="p" :label="p" :value="p" />
+      </el-select>
       <el-button type="danger" plain :disabled="historyStore.records.length === 0" @click="clearAll">
         清空历史
       </el-button>
@@ -84,6 +95,15 @@ function statusType(status: string): "success" | "danger" | "info" {
               <div class="record-top">
                 <el-tag :type="statusType(item.record.status)" size="small">
                   {{ statusText(item.record.status) }}
+                </el-tag>
+                <el-tag
+                  v-if="item.record.project"
+                  size="small"
+                  effect="plain"
+                  class="project-tag"
+                  @click="historyStore.setProjectFilter(item.record.project!)"
+                >
+                  📁 {{ item.record.project }}
                 </el-tag>
                 <span class="muted">{{ formatTime(item.record.createdAt) }}</span>
                 <span class="muted">{{ item.record.model }} · {{ item.record.size }}</span>
@@ -143,6 +163,11 @@ function statusType(status: string): "success" | "danger" | "info" {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.project-tag {
+  cursor: pointer;
 }
 .record-card {
   display: flex;

@@ -34,6 +34,7 @@ function goSettings() {
         <span class="brand-title">GPT-Image-2 生图工作台</span>
       </div>
       <el-menu :default-active="activeMenu" mode="horizontal" :ellipsis="false" router>
+        <el-menu-item index="poster">海报</el-menu-item>
         <el-menu-item index="single">单图</el-menu-item>
         <el-menu-item index="batch">批量</el-menu-item>
         <el-menu-item index="history">历史</el-menu-item>
@@ -63,7 +64,7 @@ function goSettings() {
 
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
-          <keep-alive :include="['SingleView', 'BatchView']">
+          <keep-alive :include="['PosterView', 'SingleView', 'BatchView']">
             <component :is="Component" />
           </keep-alive>
         </transition>

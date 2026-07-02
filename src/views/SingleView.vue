@@ -7,6 +7,7 @@ import { useImageGeneration } from "@/composables/useImageGeneration";
 import { consumePendingPrompt } from "@/composables/promptTransfer";
 import { STYLE_PRESETS } from "@/core/stylePresets";
 import SnippetDrawer from "@/components/SnippetDrawer.vue";
+import ProjectSelect from "@/components/ProjectSelect.vue";
 
 const configStore = useConfigStore();
 const gen = useImageGeneration();
@@ -114,6 +115,8 @@ function clearReference() {
     </div>
 
     <div class="actions">
+      <span class="muted action-label">项目：</span>
+      <ProjectSelect />
       <el-button type="primary" size="large" :loading="gen.loading.value" @click="gen.generate">
         <el-icon><Picture /></el-icon>
         <span>生成图片</span>

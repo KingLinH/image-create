@@ -8,6 +8,7 @@ import { downloadImage } from "@/core/storage";
 import { useConfigStore } from "@/stores/config";
 import SnippetDrawer from "@/components/SnippetDrawer.vue";
 import BulkPasteDialog from "@/components/BulkPasteDialog.vue";
+import ProjectSelect from "@/components/ProjectSelect.vue";
 
 const batch = useBatch();
 const configStore = useConfigStore();
@@ -230,6 +231,8 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
     </div>
 
     <div class="actions">
+      <span class="muted action-label">项目：</span>
+      <ProjectSelect />
       <el-button
         type="primary"
         size="large"

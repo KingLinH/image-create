@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { groupHistoryRecordsForDisplay, generateId, type ImageRecord } from "@/core/history";
 import { readJson, writeJson, downloadImage, makeThumbnail } from "@/core/storage";
@@ -16,11 +16,30 @@ type LegacyRecord = ImageRecord & { thumbnail?: string };
 export const useHistoryStore = defineStore("history", () => {
   const records = ref<ImageRecord[]>([]);
   const displayItems = ref(groupHistoryRecordsForDisplay([]));
+  const projectFilter = ref("");
   // id -> 缩略图 data URL（从 IndexedDB 异步载入）
   const thumbnailById = reactive<Record<string, string>>({});
 
+  // 所有出现过的项目名（用于历史页筛选下拉）。
+  const projects = computed(() => {
+    const set = new Set<string>();
+    for (const r of records.value) if (r.project) set.add(r.project);
+    return Array.from(set);
+  });
+
+  function filteredRecords(): ImageRecord[] {
+    const f = projectFilter.value.trim();
+    if (!f) return records.value;
+    return records.value.filter((r) => (r.project ?? "") === f);
+  }
+
   function refreshDisplay(): void {
-    displayItems.value = groupHistoryRecordsForDisplay(records.value);
+    displayItems.value = groupHistoryRecordsForDisplay(filteredRecords());
+  }
+
+  function setProjectFilter(name: string): void {
+    projectFilter.value = name;
+    refreshDisplay();
   }
 
   function persist(): void {
@@ -135,6 +154,9 @@ export const useHistoryStore = defineStore("history", () => {
     records,
     displayItems,
     thumbnailById,
+    projects,
+    projectFilter,
+    setProjectFilter,
     add,
     addMany,
     remove,

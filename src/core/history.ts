@@ -16,6 +16,7 @@ export type ImageRecord = {
   outputPath: string;
   durationMs: number;
   errorMessage?: string;
+  project?: string;
   batch?: {
     id: string;
     title: string;
