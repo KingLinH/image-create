@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ name: "SingleView" });
 import { computed, onMounted, ref } from "vue";
 import type { UploadFile } from "element-plus";
 import { useConfigStore } from "@/stores/config";

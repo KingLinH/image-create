@@ -63,7 +63,9 @@ function goSettings() {
 
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
-          <component :is="Component" />
+          <keep-alive :include="['SingleView', 'BatchView']">
+            <component :is="Component" />
+          </keep-alive>
         </transition>
       </router-view>
     </el-main>

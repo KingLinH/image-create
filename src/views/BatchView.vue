@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ name: "BatchView" });
 import { computed, ref } from "vue";
 import { ElMessage, type UploadFile } from "element-plus";
 import { useBatch, SPLIT_TEMPLATES } from "@/composables/useBatch";
