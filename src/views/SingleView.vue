@@ -6,6 +6,7 @@ import { useConfigStore } from "@/stores/config";
 import { useImageGeneration } from "@/composables/useImageGeneration";
 import { consumePendingPrompt } from "@/composables/promptTransfer";
 import { STYLE_PRESETS } from "@/core/stylePresets";
+import { compressImage } from "@/core/storage";
 import SnippetDrawer from "@/components/SnippetDrawer.vue";
 import ProjectSelect from "@/components/ProjectSelect.vue";
 
@@ -34,8 +35,9 @@ function toggleStyle(id: string) {
   gen.activeStyles.value = arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
 }
 
-function onReferenceChange(_file: UploadFile, files: UploadFile[]) {
-  gen.referenceImages.value = files.map((f) => f.raw).filter(Boolean) as unknown as File[];
+async function onReferenceChange(_file: UploadFile, files: UploadFile[]) {
+  const raws = files.map((f) => f.raw).filter(Boolean) as unknown as File[];
+  gen.referenceImages.value = await Promise.all(raws.map((f) => compressImage(f)));
 }
 
 function clearReference() {

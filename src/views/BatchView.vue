@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import { ElMessage, type UploadFile } from "element-plus";
 import { useBatch, SPLIT_TEMPLATES } from "@/composables/useBatch";
 import { describeError } from "@/composables/useImageGeneration";
-import { downloadImage } from "@/core/storage";
+import { downloadImage, compressImage } from "@/core/storage";
 import { useConfigStore } from "@/stores/config";
 import SnippetDrawer from "@/components/SnippetDrawer.vue";
 import BulkPasteDialog from "@/components/BulkPasteDialog.vue";
@@ -49,8 +49,9 @@ const statusType = computed<"primary" | "warning" | "info" | "success">(() => {
   }
 });
 
-function onRefChange(_file: UploadFile, files: UploadFile[]) {
-  batch.referenceImages.value = files.map((f) => f.raw).filter(Boolean) as unknown as File[];
+async function onRefChange(_file: UploadFile, files: UploadFile[]) {
+  const raws = files.map((f) => f.raw).filter(Boolean) as unknown as File[];
+  batch.referenceImages.value = await Promise.all(raws.map((f) => compressImage(f)));
 }
 
 function insertSnippet(content: string) {
