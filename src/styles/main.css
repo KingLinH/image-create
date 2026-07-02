@@ -20,6 +20,16 @@ body {
   background: #f5f6f8;
   color: #1f2329;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* 暗色模式跟随 html.dark 类（由主题切换控制），而非系统偏好 */
+html.dark body {
+  background: #141414;
+  color: #e5eaf3;
+}
+html.dark .thumb {
+  background: #262729;
 }
 
 .panel {
@@ -55,10 +65,4 @@ body {
   border-radius: 8px;
   border: 1px solid var(--el-border-color-lighter);
   background: #f0f1f3;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #1a1a1f;
-  }
 }
