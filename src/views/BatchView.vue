@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { ElMessage, type UploadFile } from "element-plus";
-import { useBatch } from "@/composables/useBatch";
+import { useBatch, SPLIT_TEMPLATES } from "@/composables/useBatch";
 import { describeError } from "@/composables/useImageGeneration";
 import { downloadImage } from "@/core/storage";
 import { useConfigStore } from "@/stores/config";
+import SnippetDrawer from "@/components/SnippetDrawer.vue";
+import BulkPasteDialog from "@/components/BulkPasteDialog.vue";
 
 const batch = useBatch();
 const configStore = useConfigStore();
+
+const snippetDrawerVisible = ref(false);
+const bulkPasteVisible = ref(false);
+const snippetCurrent = computed(() => {
+  if (batch.mode.value === "same") return batch.masterPrompt.value;
+  if (batch.mode.value === "split") return batch.splitMasterPrompt.value;
+  return batch.customPrompts.value[0] ?? "";
+});
 
 const statusText = computed(() => {
   switch (batch.status.value) {
@@ -39,6 +49,21 @@ const statusType = computed<"primary" | "warning" | "info" | "success">(() => {
 
 function onRefChange(_file: UploadFile, files: UploadFile[]) {
   batch.referenceImages.value = files.map((f) => f.raw).filter(Boolean) as unknown as File[];
+}
+
+function insertSnippet(content: string) {
+  if (batch.mode.value === "custom") {
+    batch.customPrompts.value.push(content);
+    ElMessage.success("已追加到自定义列表。");
+  } else if (batch.mode.value === "split") {
+    batch.splitMasterPrompt.value = content;
+  } else {
+    batch.masterPrompt.value = content;
+  }
+}
+
+function onBulkImport(text: string) {
+  batch.bulkImport(text);
 }
 
 async function downloadTask(previewUrl: string) {
@@ -75,6 +100,7 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
       <el-radio-group v-model="batch.mode.value">
         <el-radio-button value="same">同一提示词生成多张</el-radio-button>
         <el-radio-button value="custom">自定义多条提示词</el-radio-button>
+        <el-radio-button value="split">✨ AI 拆分提示词</el-radio-button>
       </el-radio-group>
 
       <div v-if="batch.mode.value === 'same'" class="mode-block">
@@ -91,7 +117,13 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
         </el-form>
       </div>
 
-      <div v-else class="mode-block">
+      <div v-else-if="batch.mode.value === 'custom'" class="mode-block">
+        <div class="custom-toolbar">
+          <el-button size="small" @click="bulkPasteVisible = true">
+            <el-icon><Document /></el-icon> 批量粘贴导入
+          </el-button>
+          <span class="muted">每行一条；或逐条填写 / 增删。</span>
+        </div>
         <div v-for="(_, i) in batch.customPrompts.value" :key="i" class="custom-row">
           <el-input
             v-model="batch.customPrompts.value[i]"
@@ -113,12 +145,63 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
         </el-button>
       </div>
 
+      <div v-else class="mode-block">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="输入一个主提示词，调用文字模型自动拆成多条子任务，再人工微调。"
+          class="split-alert"
+        />
+        <el-form label-width="100px" label-position="right">
+          <el-form-item label="主提示词">
+            <el-input
+              v-model="batch.splitMasterPrompt.value"
+              type="textarea"
+              :rows="3"
+              placeholder="如：为中国、日本、韩国、巴西各做一张世界杯海报"
+            />
+          </el-form-item>
+          <el-form-item label="数量">
+            <el-input-number v-model="batch.splitCount.value" :min="1" :max="20" />
+            <span class="muted">AI 会按主任务意图推荐合适数量。</span>
+          </el-form-item>
+          <el-form-item label="拆分模板">
+            <el-select v-model="batch.splitTemplate.value" style="width: 200px">
+              <el-option v-for="t in SPLIT_TEMPLATES" :key="t.id" :label="t.label" :value="t.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="风格锁定">
+            <el-input v-model="batch.styleLock.value" placeholder="可选：统一风格，会追加到每条子提示词" />
+          </el-form-item>
+        </el-form>
+        <el-button type="primary" :loading="batch.splitting.value" @click="batch.runSplit">
+          <el-icon><MagicStick /></el-icon> 调用 AI 拆分
+        </el-button>
+        <div v-if="batch.splitInfo.value" class="split-info muted">
+          <template v-if="batch.splitInfo.value.recommendedCount">
+            推荐数量：{{ batch.splitInfo.value.recommendedCount }} 条
+          </template>
+          <span v-if="batch.splitInfo.value.countReason"> · {{ batch.splitInfo.value.countReason }}</span>
+        </div>
+      </div>
+
       <div class="plan-actions">
         <el-button @click="batch.planTasks">
           <el-icon><List /></el-icon> 生成任务列表
         </el-button>
+        <el-button @click="snippetDrawerVisible = true">
+          <el-icon><Files /></el-icon> 片段库
+        </el-button>
       </div>
     </div>
+
+    <SnippetDrawer
+      v-model="snippetDrawerVisible"
+      :current-prompt="snippetCurrent"
+      @insert="insertSnippet"
+    />
+    <BulkPasteDialog v-model="bulkPasteVisible" @import="onBulkImport" />
 
     <div class="panel">
       <p class="panel-title">执行设置 & 参考图</p>
@@ -226,6 +309,18 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
 <style scoped>
 .mode-block {
   margin-top: 14px;
+}
+.custom-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.split-alert {
+  margin-bottom: 14px;
+}
+.split-info {
+  margin-top: 10px;
 }
 .plan-actions {
   margin-top: 12px;

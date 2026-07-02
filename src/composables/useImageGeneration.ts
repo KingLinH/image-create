@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { generateImages, optimizePrompt, type ParsedImage } from "@/core/api";
 import { ApiClientError } from "@/core/api";
@@ -7,6 +7,7 @@ import { useHistoryStore } from "@/stores/history";
 import { buildOutputPath } from "@/core/fileNames";
 import { generateId, type ImageRecord } from "@/core/history";
 import { downloadImage } from "@/core/storage";
+import { composePrompt } from "@/core/stylePresets";
 
 export function useImageGeneration() {
   const configStore = useConfigStore();
@@ -16,9 +17,13 @@ export function useImageGeneration() {
   const optimizing = ref(false);
   const prompt = ref("");
   const optimizedPrompt = ref("");
+  const activeStyles = ref<string[]>([]);
   const referenceImages = ref<File[]>([]);
   const images = ref<ParsedImage[]>([]);
   const errorMessage = ref("");
+
+  // 实际发送给模型的提示词 = 原始提示词 + 激活的风格修饰。
+  const effectivePrompt = computed(() => composePrompt(prompt.value, activeStyles.value));
 
   async function optimize() {
     if (!prompt.value.trim()) {
@@ -41,7 +46,7 @@ export function useImageGeneration() {
   }
 
   async function generate(): Promise<void> {
-    const currentPrompt = prompt.value.trim();
+    const currentPrompt = effectivePrompt.value;
     if (!currentPrompt) {
       ElMessage.warning("请填写提示词。");
       return;
@@ -118,6 +123,7 @@ export function useImageGeneration() {
   function reset() {
     prompt.value = "";
     optimizedPrompt.value = "";
+    activeStyles.value = [];
     referenceImages.value = [];
     images.value = [];
     errorMessage.value = "";
@@ -128,6 +134,8 @@ export function useImageGeneration() {
     optimizing,
     prompt,
     optimizedPrompt,
+    activeStyles,
+    effectivePrompt,
     referenceImages,
     images,
     errorMessage,

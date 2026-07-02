@@ -7,6 +7,7 @@ import "element-plus/es/components/message-box/style/css";
 import "element-plus/theme-chalk/dark/css-vars.css";
 // 仅注册实际用到的图标（避免打包全部 ~300 个图标）
 import {
+  Document,
   Download,
   Files,
   List,
@@ -36,6 +37,7 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 const icons = {
+  Document,
   Download,
   Files,
   List,

@@ -4,6 +4,8 @@ import type { UploadFile } from "element-plus";
 import { useConfigStore } from "@/stores/config";
 import { useImageGeneration } from "@/composables/useImageGeneration";
 import { consumePendingPrompt } from "@/composables/promptTransfer";
+import { STYLE_PRESETS } from "@/core/stylePresets";
+import SnippetDrawer from "@/components/SnippetDrawer.vue";
 
 const configStore = useConfigStore();
 const gen = useImageGeneration();
@@ -18,9 +20,16 @@ const currentCount = computed(() => configStore.config.defaultCount);
 const currentQuality = computed(() => configStore.config.defaultQuality);
 const currentFormat = computed(() => configStore.config.defaultFormat);
 
+const snippetDrawerVisible = ref(false);
+
 const sizeInput = ref(configStore.config.defaultSize);
 function applySize() {
   if (sizeInput.value.trim()) configStore.update({ defaultSize: sizeInput.value.trim() });
+}
+
+function toggleStyle(id: string) {
+  const arr = gen.activeStyles.value;
+  gen.activeStyles.value = arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
 }
 
 function onReferenceChange(_file: UploadFile, files: UploadFile[]) {
@@ -49,7 +58,27 @@ function clearReference() {
           <el-icon><MagicStick /></el-icon>
           <span>用文字模型优化提示词</span>
         </el-button>
+        <el-button @click="snippetDrawerVisible = true">
+          <el-icon><Files /></el-icon>
+          <span>片段库</span>
+        </el-button>
         <span class="muted">优化后的提示词会替换上方内容。</span>
+      </div>
+
+      <div class="style-row">
+        <span class="style-label muted">风格预设：</span>
+        <el-check-tag
+          v-for="p in STYLE_PRESETS"
+          :key="p.id"
+          :checked="gen.activeStyles.value.includes(p.id)"
+          @change="toggleStyle(p.id)"
+        >
+          {{ p.emoji }} {{ p.label }}
+        </el-check-tag>
+      </div>
+      <div class="effective" v-if="gen.activeStyles.value.length > 0">
+        <span class="muted">实际发送：</span>
+        <code>{{ gen.effectivePrompt.value }}</code>
       </div>
     </div>
 
@@ -114,6 +143,12 @@ function clearReference() {
         </div>
       </div>
     </div>
+
+    <SnippetDrawer
+      v-model="snippetDrawerVisible"
+      :current-prompt="gen.prompt.value"
+      @insert="gen.prompt.value = $event"
+    />
   </div>
 </template>
 
@@ -123,6 +158,27 @@ function clearReference() {
   align-items: center;
   gap: 10px;
   margin-top: 10px;
+}
+.style-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.style-label {
+  font-size: 12px;
+}
+.effective {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.effective code {
+  word-break: break-all;
+  color: var(--el-text-color-regular);
 }
 .actions {
   display: flex;

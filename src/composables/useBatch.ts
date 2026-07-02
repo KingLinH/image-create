@@ -7,9 +7,16 @@ import { buildOutputPath } from "@/core/fileNames";
 import { generateId, type ImageRecord } from "@/core/history";
 import { describeError } from "./useImageGeneration";
 import type { ParsedImage } from "@/core/api";
+import {
+  BUILT_IN_SPLIT_TEMPLATES,
+  splitPromptWithTextModel,
+  type SplitTemplateId,
+} from "@/core/promptSplitter";
 import { MAX_BATCH_TASK_COUNT } from "@/core/config";
 
-export type BatchMode = "same" | "custom";
+export const SPLIT_TEMPLATES = BUILT_IN_SPLIT_TEMPLATES;
+
+export type BatchMode = "same" | "custom" | "split";
 
 export function useBatch() {
   const configStore = useConfigStore();
@@ -20,6 +27,13 @@ export function useBatch() {
   const taskCount = ref(configStore.config.batchDefaultTaskCount);
   const customPrompts = ref<string[]>([""]);
   const styleLock = ref("");
+
+  // AI 拆分相关状态
+  const splitMasterPrompt = ref("");
+  const splitCount = ref(configStore.config.batchDefaultTaskCount);
+  const splitTemplate = ref<SplitTemplateId>("basic");
+  const splitting = ref(false);
+  const splitInfo = ref<{ recommendedCount?: number; countReason?: string } | null>(null);
 
   const referenceImages = ref<File[]>([]);
 
@@ -112,6 +126,62 @@ export function useBatch() {
   function removeCustomPrompt(index: number): void {
     if (customPrompts.value.length <= 1) return;
     customPrompts.value.splice(index, 1);
+  }
+
+  // 批量粘贴导入：每行一条提示词，去空去重，上限 MAX_BATCH_TASK_COUNT。
+  function bulkImport(text: string): number {
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const deduped = Array.from(new Set(lines)).slice(0, MAX_BATCH_TASK_COUNT);
+    if (deduped.length === 0) {
+      ElMessage.warning("没有可导入的提示词。");
+      return 0;
+    }
+    customPrompts.value = deduped;
+    mode.value = "custom";
+    tasks.value = [];
+    status.value = "idle";
+    ElMessage.success(`已导入 ${deduped.length} 条提示词。`);
+    return deduped.length;
+  }
+
+  // AI 拆分：主提示词 → 文字模型拆成多条子任务，填入 customPrompts 供人工 review。
+  async function runSplit(): Promise<void> {
+    if (!splitMasterPrompt.value.trim()) {
+      ElMessage.warning("请填写要拆分的主提示词。");
+      return;
+    }
+    if (!configStore.isValid) {
+      ElMessage.error("配置有误，请先到「设置」检查。");
+      return;
+    }
+    splitting.value = true;
+    splitInfo.value = null;
+    try {
+      const result = await splitPromptWithTextModel({
+        config: configStore.config,
+        masterPrompt: splitMasterPrompt.value,
+        count: splitCount.value,
+        templateId: splitTemplate.value,
+        styleLock: styleLock.value,
+      });
+      customPrompts.value = result.items.map((it) => it.prompt);
+      splitCount.value = result.recommendedCount ?? result.items.length;
+      splitInfo.value = {
+        recommendedCount: result.recommendedCount,
+        countReason: result.countReason,
+      };
+      mode.value = "custom";
+      tasks.value = [];
+      status.value = "idle";
+      ElMessage.success(`AI 拆分完成，共 ${result.items.length} 条，已转入自定义模式可编辑。`);
+    } catch (error) {
+      ElMessage.error(`AI 拆分失败：${describeError(error)}`);
+    } finally {
+      splitting.value = false;
+    }
   }
 
   async function start(): Promise<void> {
@@ -257,6 +327,11 @@ export function useBatch() {
     taskCount,
     customPrompts,
     styleLock,
+    splitMasterPrompt,
+    splitCount,
+    splitTemplate,
+    splitting,
+    splitInfo,
     referenceImages,
     concurrency,
     intervalSeconds,
@@ -271,6 +346,8 @@ export function useBatch() {
     planTasks,
     addCustomPrompt,
     removeCustomPrompt,
+    bulkImport,
+    runSplit,
     start,
     pause,
     cancel,
