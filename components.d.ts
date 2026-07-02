@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AssetsDrawer: typeof import('./src/components/AssetsDrawer.vue')['default']
     BulkPasteDialog: typeof import('./src/components/BulkPasteDialog.vue')['default']
     CompareDialog: typeof import('./src/components/CompareDialog.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']

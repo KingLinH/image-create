@@ -9,12 +9,19 @@ import { useConfigStore } from "@/stores/config";
 import SnippetDrawer from "@/components/SnippetDrawer.vue";
 import BulkPasteDialog from "@/components/BulkPasteDialog.vue";
 import ProjectSelect from "@/components/ProjectSelect.vue";
+import AssetsDrawer from "@/components/AssetsDrawer.vue";
 
 const batch = useBatch();
 const configStore = useConfigStore();
 
 const snippetDrawerVisible = ref(false);
 const bulkPasteVisible = ref(false);
+const assetsDrawerVisible = ref(false);
+
+function onUseAsset(file: File) {
+  batch.referenceImages.value = [...batch.referenceImages.value, file];
+  ElMessage.success("已从素材库加入参考图。");
+}
 const snippetCurrent = computed(() => {
   if (batch.mode.value === "same") return batch.masterPrompt.value;
   if (batch.mode.value === "split") return batch.splitMasterPrompt.value;
@@ -205,6 +212,7 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
       @insert="insertSnippet"
     />
     <BulkPasteDialog v-model="bulkPasteVisible" @import="onBulkImport" />
+    <AssetsDrawer v-model="assetsDrawerVisible" @use="onUseAsset" />
 
     <div class="panel">
       <p class="panel-title">执行设置 & 参考图</p>
@@ -228,7 +236,12 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
       >
         <el-icon><Plus /></el-icon>
       </el-upload>
-      <div class="muted">批量图生图：同一组参考图会发给每个任务。</div>
+      <div class="ref-bar">
+        <el-button size="small" @click="assetsDrawerVisible = true">
+          <el-icon><Files /></el-icon> 素材库
+        </el-button>
+        <span class="muted">批量图生图：同一组参考图会发给每个任务。</span>
+      </div>
     </div>
 
     <div class="actions">
@@ -314,6 +327,13 @@ function taskStatusType(status: string): "success" | "warning" | "info" | "prima
 <style scoped>
 .mode-block {
   margin-top: 14px;
+}
+.ref-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 .custom-toolbar {
   display: flex;

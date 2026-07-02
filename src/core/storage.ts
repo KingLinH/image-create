@@ -84,6 +84,28 @@ export async function compressImage(file: File, maxEdge = 1280, quality = 0.85):
   }
 }
 
+// File → 纯 base64（不含 data: 前缀）。
+export function fileToBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const i = result.indexOf(",");
+      resolve(i >= 0 ? result.slice(i + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("读取文件失败。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// 纯 base64 → File（默认 image/jpeg）。
+export function base64ToFile(base64: string, name: string, type = "image/jpeg"): File {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], name, { type });
+}
+
 // 触发浏览器下载。base64 或远程 url 均可。
 export async function downloadImage(
   source: { base64?: string; url?: string },

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 defineOptions({ name: "SingleView" });
 import { computed, onMounted, ref } from "vue";
-import type { UploadFile } from "element-plus";
+import { ElMessage, type UploadFile } from "element-plus";
 import { useConfigStore } from "@/stores/config";
 import { useImageGeneration } from "@/composables/useImageGeneration";
 import { consumePendingPrompt } from "@/composables/promptTransfer";
 import { STYLE_PRESETS } from "@/core/stylePresets";
 import { compressImage } from "@/core/storage";
 import SnippetDrawer from "@/components/SnippetDrawer.vue";
+import AssetsDrawer from "@/components/AssetsDrawer.vue";
 import ProjectSelect from "@/components/ProjectSelect.vue";
 
 const configStore = useConfigStore();
@@ -24,6 +25,12 @@ const currentQuality = computed(() => configStore.config.defaultQuality);
 const currentFormat = computed(() => configStore.config.defaultFormat);
 
 const snippetDrawerVisible = ref(false);
+const assetsDrawerVisible = ref(false);
+
+function onUseAsset(file: File) {
+  gen.referenceImages.value = [...gen.referenceImages.value, file];
+  ElMessage.success("已从素材库加入参考图。");
+}
 
 const sizeInput = ref(configStore.config.defaultSize);
 function applySize() {
@@ -102,7 +109,10 @@ function clearReference() {
     </div>
 
     <div class="panel">
-      <p class="panel-title">参考图（图生图，可选）</p>
+      <p class="panel-title">
+        参考图（图生图，可选）
+        <el-button link type="primary" size="small" @click="assetsDrawerVisible = true">素材库</el-button>
+      </p>
       <el-upload
         :auto-upload="false"
         list-type="picture-card"
@@ -155,6 +165,7 @@ function clearReference() {
       :current-prompt="gen.prompt.value"
       @insert="gen.prompt.value = $event"
     />
+    <AssetsDrawer v-model="assetsDrawerVisible" @use="onUseAsset" />
   </div>
 </template>
 

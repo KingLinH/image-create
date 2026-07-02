@@ -1,15 +1,17 @@
 <script setup lang="ts">
 defineOptions({ name: "PosterView" });
 import { computed, onMounted, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, type UploadFile } from "element-plus";
 import { useConfigStore } from "@/stores/config";
 import { useImageGeneration } from "@/composables/useImageGeneration";
 import { POSTER_TYPES, findPosterType } from "@/core/posterTypes";
 import { STYLE_PRESETS } from "@/core/stylePresets";
 import { COMPOSITION_PRESETS } from "@/core/compositionPresets";
+import { compressImage } from "@/core/storage";
 import PosterBuilder from "@/components/PosterBuilder.vue";
 import ProjectSelect from "@/components/ProjectSelect.vue";
 import SnippetDrawer from "@/components/SnippetDrawer.vue";
+import AssetsDrawer from "@/components/AssetsDrawer.vue";
 
 const configStore = useConfigStore();
 const gen = useImageGeneration();
@@ -19,6 +21,21 @@ const currentType = computed(() => findPosterType(selectedType.value)!);
 const sizeOptions = computed(() => currentType.value.sizes);
 const sizeRef = ref(currentType.value.sizes[0]);
 const snippetDrawerVisible = ref(false);
+const assetsDrawerVisible = ref(false);
+
+async function onPosterRefChange(_file: UploadFile, files: UploadFile[]) {
+  const raws = files.map((f) => f.raw).filter(Boolean) as unknown as File[];
+  gen.referenceImages.value = await Promise.all(raws.map((f) => compressImage(f)));
+}
+
+function clearPosterRef() {
+  gen.referenceImages.value = [];
+}
+
+function onUseAsset(file: File) {
+  gen.referenceImages.value = [...gen.referenceImages.value, file];
+  ElMessage.success("已从素材库加入参考图。");
+}
 
 function applySize() {
   if (sizeRef.value) configStore.update({ defaultSize: sizeRef.value });
@@ -142,6 +159,24 @@ watch(selectedType, applyTypeDefaults);
       </div>
     </div>
 
+    <div class="panel">
+      <p class="panel-title">
+        参考图（图生图，可选）
+        <el-button link type="primary" size="small" @click="assetsDrawerVisible = true">素材库</el-button>
+      </p>
+      <el-upload
+        :auto-upload="false"
+        list-type="picture-card"
+        :on-change="onPosterRefChange"
+        :on-remove="clearPosterRef"
+        accept="image/png,image/jpeg,image/webp"
+        multiple
+      >
+        <el-icon><Plus /></el-icon>
+      </el-upload>
+      <div class="muted">上传产品图/Logo 等做参考，或从「素材库」一键加入。</div>
+    </div>
+
     <div class="panel result-panel" v-if="gen.images.value.length > 0 || gen.loading.value">
       <p class="panel-title">结果</p>
       <div v-if="gen.loading.value" class="loading-block">
@@ -170,6 +205,7 @@ watch(selectedType, applyTypeDefaults);
       :current-prompt="gen.prompt.value"
       @insert="gen.prompt.value = $event"
     />
+    <AssetsDrawer v-model="assetsDrawerVisible" @use="onUseAsset" />
   </div>
 </template>
 
