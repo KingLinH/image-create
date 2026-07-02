@@ -28,7 +28,7 @@ export const useHistoryStore = defineStore("history", () => {
   });
 
   function filteredRecords(): ImageRecord[] {
-    const f = projectFilter.value.trim();
+    const f = (projectFilter.value ?? "").trim();
     if (!f) return records.value;
     return records.value.filter((r) => (r.project ?? "") === f);
   }
@@ -37,8 +37,9 @@ export const useHistoryStore = defineStore("history", () => {
     displayItems.value = groupHistoryRecordsForDisplay(filteredRecords());
   }
 
-  function setProjectFilter(name: string): void {
-    projectFilter.value = name;
+  // el-select 清除时会传 undefined，这里统一兜底为空串。
+  function setProjectFilter(name: string | undefined | null): void {
+    projectFilter.value = typeof name === "string" ? name : "";
     refreshDisplay();
   }
 
