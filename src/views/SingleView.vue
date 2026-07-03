@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineOptions({ name: "SingleView" });
-import { computed, onMounted, ref } from "vue";
+import { computed, onActivated, ref } from "vue";
 import { ElMessage, type UploadFile } from "element-plus";
 import { useConfigStore } from "@/stores/config";
 import { useImageGeneration } from "@/composables/useImageGeneration";
@@ -14,7 +14,7 @@ import ProjectSelect from "@/components/ProjectSelect.vue";
 const configStore = useConfigStore();
 const gen = useImageGeneration();
 
-onMounted(() => {
+onActivated(() => {
   const reused = consumePendingPrompt();
   if (reused) gen.prompt.value = reused;
 });
