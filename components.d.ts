@@ -21,8 +21,10 @@ declare module 'vue' {
     ElCheckTag: typeof import('element-plus/es')['ElCheckTag']
     ElCollapse: typeof import('element-plus/es')['ElCollapse']
     ElCollapseItem: typeof import('element-plus/es')['ElCollapseItem']
+    ElColorPicker: typeof import('element-plus/es')['ElColorPicker']
     ElContainer: typeof import('element-plus/es')['ElContainer']
     ElDialog: typeof import('element-plus/es')['ElDialog']
+    ElDivider: typeof import('element-plus/es')['ElDivider']
     ElDrawer: typeof import('element-plus/es')['ElDrawer']
     ElDropdown: typeof import('element-plus/es')['ElDropdown']
     ElDropdownItem: typeof import('element-plus/es')['ElDropdownItem']
@@ -58,5 +60,14 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SnippetDrawer: typeof import('./src/components/SnippetDrawer.vue')['default']
     StatsPanel: typeof import('./src/components/StatsPanel.vue')['default']
+    StickerCanvasEditor: typeof import('./src/components/sticker/StickerCanvasEditor.vue')['default']
+    StickerExportPanel: typeof import('./src/components/sticker/StickerExportPanel.vue')['default']
+    StickerFrameList: typeof import('./src/components/sticker/StickerFrameList.vue')['default']
+    StickerSourcePanel: typeof import('./src/components/sticker/StickerSourcePanel.vue')['default']
+    StickerSpecSelector: typeof import('./src/components/sticker/StickerSpecSelector.vue')['default']
+    StickerValidationPanel: typeof import('./src/components/sticker/StickerValidationPanel.vue')['default']
+  }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

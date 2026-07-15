@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from "vue-rou
 import PosterView from "@/views/PosterView.vue";
 import SingleView from "@/views/SingleView.vue";
 import BatchView from "@/views/BatchView.vue";
+import StickerView from "@/views/StickerView.vue";
 import HistoryView from "@/views/HistoryView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 
@@ -13,6 +14,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/poster", name: "poster", component: PosterView, meta: { title: "海报" } },
   { path: "/single", name: "single", component: SingleView, meta: { title: "单图" } },
   { path: "/batch", name: "batch", component: BatchView, meta: { title: "批量" } },
+  { path: "/sticker", name: "sticker", component: StickerView, meta: { title: "表情" } },
   { path: "/history", name: "history", component: HistoryView, meta: { title: "历史" } },
   { path: "/settings", name: "settings", component: SettingsView, meta: { title: "设置" } },
 ];

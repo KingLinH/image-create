@@ -37,6 +37,7 @@ function goSettings() {
         <el-menu-item index="poster">海报</el-menu-item>
         <el-menu-item index="single">单图</el-menu-item>
         <el-menu-item index="batch">批量</el-menu-item>
+        <el-menu-item index="sticker">表情</el-menu-item>
         <el-menu-item index="history">历史</el-menu-item>
         <el-menu-item index="settings">设置</el-menu-item>
       </el-menu>
@@ -64,7 +65,7 @@ function goSettings() {
 
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
-          <keep-alive :include="['PosterView', 'SingleView', 'BatchView']">
+          <keep-alive :include="['PosterView', 'SingleView', 'BatchView', 'StickerView']">
             <component :is="Component" />
           </keep-alive>
         </transition>
