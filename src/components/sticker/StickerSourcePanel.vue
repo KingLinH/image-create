@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { UploadFile } from "element-plus";
 import type { StickerVideoMetadata } from "@/core/stickerVideo";
 import type { VideoPreset, VideoSamplingMode, VideoSamplingPlan } from "@/composables/useStickerMaker";
@@ -15,6 +16,10 @@ const props = defineProps<{
   videoSamplingPlan: VideoSamplingPlan;
   videoStartTime: number;
   videoEndTime: number;
+  videoEffectiveStartTime: number;
+  videoEffectiveEndTime: number;
+  videoStartPreview?: string | null;
+  videoEndPreview?: string | null;
   defaultDelay: number;
   toolMaxFrames?: number;
   lastVideoMeta?: StickerVideoMetadata | null;
@@ -28,6 +33,7 @@ const emit = defineEmits<{
   updateVideoSamplingMode: [value: VideoSamplingMode];
   updateVideoStartTime: [value: number];
   updateVideoEndTime: [value: number];
+  updateVideoRange: [value: [number, number]];
   updateDefaultDelay: [value: number];
   applyVideoPreset: [value: VideoPreset];
   reextractVideo: [];
@@ -35,6 +41,20 @@ const emit = defineEmits<{
 
 function onChange(file: UploadFile) {
   if (file.raw) emit("upload", [file.raw as File]);
+}
+
+const videoRangeModel = computed({
+  get: (): [number, number] => [props.videoEffectiveStartTime, props.videoEffectiveEndTime],
+  set: (value: [number, number]) => emit("updateVideoRange", value),
+});
+
+const selectedVideoDurationText = computed(() => {
+  const duration = Math.max(0, props.videoEffectiveEndTime - props.videoEffectiveStartTime);
+  return `${duration.toFixed(2)}s`;
+});
+
+function formatSecondsTooltip(value: number) {
+  return `${value.toFixed(2)}s`;
 }
 </script>
 
@@ -90,6 +110,43 @@ function onChange(file: UploadFile) {
         <p v-if="props.lastVideoMeta" class="muted">
           最近视频：{{ props.lastVideoMeta.width }}×{{ props.lastVideoMeta.height }} · {{ props.lastVideoMeta.duration.toFixed(2) }}s
         </p>
+
+        <div v-if="props.lastVideoMeta" class="video-range-panel">
+          <div class="video-range-previews">
+            <div class="video-range-preview">
+              <span>起始 {{ props.videoEffectiveStartTime.toFixed(2) }}s</span>
+              <img v-if="props.videoStartPreview" :src="props.videoStartPreview" alt="" />
+            </div>
+            <div class="video-range-preview">
+              <span>结束 {{ props.videoEffectiveEndTime.toFixed(2) }}s</span>
+              <img v-if="props.videoEndPreview" :src="props.videoEndPreview" alt="" />
+            </div>
+          </div>
+          <div class="video-range-meta">
+            <span>已选 {{ selectedVideoDurationText }}</span>
+            <span>总长 {{ props.lastVideoMeta.duration.toFixed(2) }}s</span>
+          </div>
+          <el-slider
+            v-model="videoRangeModel"
+            range
+            :min="0"
+            :max="props.lastVideoMeta.duration"
+            :step="0.05"
+            :format-tooltip="formatSecondsTooltip"
+          />
+          <div class="video-range-actions">
+            <span>调整片段后，需要重新抽帧才会更新下方帧列表。</span>
+            <el-button
+              size="small"
+              type="primary"
+              :disabled="!props.canReextractVideo || props.videoExtracting"
+              :loading="props.videoExtracting"
+              @click="emit('reextractVideo')"
+            >
+              按当前片段重新抽帧
+            </el-button>
+          </div>
+        </div>
 
         <el-collapse class="advanced-collapse">
           <el-collapse-item title="高级设置：换片段或调流畅度/体积" name="video-advanced">
@@ -318,6 +375,55 @@ function onChange(file: UploadFile) {
 }
 .sampling-tip {
   color: var(--el-color-primary);
+}
+.video-range-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+.video-range-previews {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.video-range-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.video-range-preview img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--el-fill-color-light);
+}
+.video-range-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.video-range-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.video-range-actions span {
+  min-width: 0;
+  line-height: 1.4;
 }
 .extracting {
   margin-top: 10px;

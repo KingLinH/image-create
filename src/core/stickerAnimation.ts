@@ -30,6 +30,15 @@ export type StickerGifEncodeOptions = {
   maxColors?: number;
   transparentAlphaThreshold?: number;
   optimization?: StickerOptimizationInfo;
+  signal?: AbortSignal;
+};
+
+export type StickerGifOptimizeProgress = {
+  attempt: number;
+  totalAttempts: number;
+  colors: number;
+  frameCount: number;
+  strategy: string;
 };
 
 export type StickerGifOptimizeOptions = {
@@ -38,6 +47,8 @@ export type StickerGifOptimizeOptions = {
   targetRatio?: number;
   transparentAlphaThreshold?: number;
   allowFrameDropping?: boolean;
+  signal?: AbortSignal;
+  onProgress?: (progress: StickerGifOptimizeProgress) => void;
 };
 
 export type StickerPackageFile = {
@@ -58,6 +69,7 @@ export async function encodeStickerGif(
   const transparentAlphaThreshold = clampInt(options.transparentAlphaThreshold ?? 16, 0, 255);
 
   for (const frame of frames) {
+    throwIfAborted(options.signal);
     if (frame.canvas.width !== width || frame.canvas.height !== height) {
       throw new Error(`动态帧尺寸必须统一为 ${width}×${height}。`);
     }
@@ -75,6 +87,7 @@ export async function encodeStickerGif(
     encoder.writeFrame(encoded.indexed, width, height, writeOptions);
   }
 
+  throwIfAborted(options.signal);
   encoder.finish();
   const blob = new Blob([encoder.bytes()], { type: "image/gif" });
   const info: StickerAnimationInfo = {
@@ -100,15 +113,25 @@ export async function encodeStickerGifNearSizeLimit(
   const colorCandidates = uniqueNumbers([preferredColors, 256, 192, 160, 128, 96, 64, 48, 32, 24, 16, 12, 8, 6, 4])
     .filter((colors) => colors <= preferredColors && colors >= minColors);
   const frameSets = buildFrameCandidates(frames, spec, options.allowFrameDropping ?? true);
+  const totalAttempts = Math.max(1, frameSets.length * colorCandidates.length);
   let attempts = 0;
   const results: StickerGifResult[] = [];
 
   for (const frameSet of frameSets) {
     for (const colors of colorCandidates) {
+      throwIfAborted(options.signal);
       attempts += 1;
+      options.onProgress?.({
+        attempt: attempts,
+        totalAttempts,
+        colors,
+        frameCount: frameSet.frames.length,
+        strategy: frameSet.strategy,
+      });
       const result = await encodeStickerGif(frameSet.frames, spec, {
         maxColors: colors,
         transparentAlphaThreshold: options.transparentAlphaThreshold,
+        signal: options.signal,
         optimization: {
           targetBytes,
           maxBytes: spec.maxBytes,
@@ -247,4 +270,9 @@ function uniqueNumbers(values: number[]) {
 
 function clampInt(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw new DOMException("Operation cancelled", "AbortError");
 }

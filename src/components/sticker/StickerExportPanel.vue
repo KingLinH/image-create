@@ -15,28 +15,32 @@ const props = defineProps<{
   staticOptimization?: StickerStaticOptimizeResult | null;
   gifOptimization?: StickerOptimizationInfo | null;
   exporting: boolean;
+  processingStage?: string;
+  processingProgress?: { current: number; total: number; text: string } | null;
+  canCancel?: boolean;
 }>();
 const emit = defineEmits<{
   static: [];
   gif: [];
-  zip: [];
   downloadStatic: [];
   downloadGif: [];
+  cancel: [];
 }>();
 
 const canExportStatic = computed(() => props.hasSource && props.mode === "static");
 const canExportGif = computed(() => props.hasFrames && props.mode === "animated");
-const hasStaticExport = computed(() => Boolean(props.staticPreview));
-const hasGifExport = computed(() => Boolean(props.gifPreview));
 const hasInvalidStaticExport = computed(() => Boolean(props.staticInfo && props.staticOptimization && props.staticInfo.bytes > props.staticOptimization.maxBytes));
 const hasInvalidGifExport = computed(() => Boolean(props.gifInfo && props.gifOptimization && props.gifInfo.bytes > props.gifOptimization.maxBytes));
 const hasInvalidExport = computed(() => hasInvalidStaticExport.value || hasInvalidGifExport.value);
-const hasAnyExport = computed(() => hasStaticExport.value || hasGifExport.value);
 const staticPreviewList = computed(() => props.staticPreview ? [props.staticPreview] : []);
 const gifPreviewList = computed(() => props.gifPreview ? [props.gifPreview] : []);
+const progressPercentage = computed(() => {
+  const progress = props.processingProgress;
+  if (!progress) return 0;
+  return Math.min(100, Math.max(0, Math.round((progress.current / Math.max(1, progress.total)) * 100)));
+});
 const staticActionText = computed(() => props.exporting && props.mode === "static" ? "正在处理并优化…" : "处理静态表情");
 const gifActionText = computed(() => props.exporting && props.mode === "animated" ? "正在合成并压缩…" : "合成 GIF");
-const zipActionText = computed(() => props.exporting ? "正在准备导出…" : "生成投稿 ZIP");
 </script>
 
 <template>
@@ -68,13 +72,24 @@ const zipActionText = computed(() => props.exporting ? "正在准备导出…" :
       >
         {{ gifActionText }}
       </el-button>
-      <el-button type="success" :loading="props.exporting" :disabled="!hasAnyExport || hasInvalidExport" @click="emit('zip')">
-        {{ zipActionText }}
-      </el-button>
       <span v-if="props.exporting" class="exporting-tip">
         {{ props.mode === 'animated' ? '正在尝试降色和必要的帧抽样以控制 500KB 体积，素材越复杂耗时越久。' : '正在尝试不同压缩参数，尽量贴近规格上限。' }}
       </span>
       <span v-if="hasInvalidExport" class="invalid-export-tip">结果仍超出规格，调整素材后重新处理/合成再下载。</span>
+    </div>
+    <div v-if="props.processingProgress" class="processing-progress">
+      <div class="processing-progress-header">
+        <span>{{ props.processingProgress.text }}</span>
+        <el-button
+          v-if="props.canCancel"
+          link
+          type="danger"
+          @click="emit('cancel')"
+        >
+          取消
+        </el-button>
+      </div>
+      <el-progress :percentage="progressPercentage" :stroke-width="8" />
     </div>
     <div class="preview-grid">
       <div v-if="props.staticPreview" class="preview-card">
@@ -151,6 +166,22 @@ const zipActionText = computed(() => props.exporting ? "正在准备导出…" :
   color: var(--el-color-danger);
   font-size: 12px;
   align-self: center;
+}
+.processing-progress {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+.processing-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .preview-grid {
   display: flex;

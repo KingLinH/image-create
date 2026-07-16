@@ -1,8 +1,8 @@
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { generateImages, type ParsedImage } from "@/core/api";
 import { formatTimestamp } from "@/core/fileNames";
-import { buildStickerExportName, buildStickerZip, encodeStickerGifNearSizeLimit, type StickerGifResult } from "@/core/stickerAnimation";
+import { buildStickerExportName, buildStickerZip, encodeStickerGifNearSizeLimit, type StickerGifFrame, type StickerGifResult } from "@/core/stickerAnimation";
 import {
   canvasToObjectUrl,
   canvasToPreviewUrl,
@@ -25,7 +25,7 @@ import {
   type StickerSpec,
   type StickerValidationResult,
 } from "@/core/stickerSpecs";
-import { extractVideoFrames, getVideoMetadata, isVideoFile, type StickerVideoMetadata } from "@/core/stickerVideo";
+import { createVideoFramePreview, extractVideoFrames, getVideoMetadata, isVideoFile, type StickerVideoMetadata } from "@/core/stickerVideo";
 import { useConfigStore } from "@/stores/config";
 import { buildStickerPrompt } from "@/core/stickerPrompts";
 
@@ -60,6 +60,15 @@ export type VideoSamplingPlan = {
   recommendedMaxFrames: number;
   tip: string;
 };
+
+export type StickerProcessingStage = "idle" | "extracting-video" | "rendering-preview" | "rendering-frames" | "encoding-gif";
+export type StickerProcessingProgress = {
+  current: number;
+  total: number;
+  text: string;
+};
+
+const ANIMATED_PREVIEW_FRAME_LIMIT = 48;
 
 export function useStickerMaker() {
   const configStore = useConfigStore();
@@ -102,11 +111,20 @@ export function useStickerMaker() {
   const staticExport = ref<StickerExportResult | null>(null);
   const gifExport = ref<StickerGifResult | null>(null);
   const livePreviewUrl = ref<string | null>(null);
+  const animatedPreviewFrames = ref<string[]>([]);
+  const animatedPreviewDelays = ref<number[]>([]);
   const livePreviewLoading = ref(false);
+  const videoStartPreviewUrl = ref<string | null>(null);
+  const videoEndPreviewUrl = ref<string | null>(null);
+  const processingStage = ref<StickerProcessingStage>("idle");
+  const processingProgress = ref<StickerProcessingProgress | null>(null);
   const loading = ref(false);
   const exporting = ref(false);
   let previewTimer: number | null = null;
+  let videoEndpointPreviewTimer: number | null = null;
   let previewToken = 0;
+  let videoEndpointPreviewToken = 0;
+  let processingController: AbortController | null = null;
 
   const spec = computed<StickerSpec>(() => getStickerSpec(specKind.value));
   const effectivePrompt = computed(() => buildStickerPrompt({
@@ -118,6 +136,10 @@ export function useStickerMaker() {
   const hasSource = computed(() => Boolean(staticSource.value));
   const hasFrames = computed(() => frames.value.length > 0);
   const canReextractVideo = computed(() => Boolean(lastVideoFile.value) && sourceMode.value === "video");
+  const animatedPreviewPlaying = computed(() => mode.value === "animated" && animatedPreviewFrames.value.length > 1);
+  const canCancelProcessing = computed(() => processingStage.value === "extracting-video" || processingStage.value === "rendering-frames" || processingStage.value === "encoding-gif");
+  const videoEffectiveStartTime = computed(() => currentVideoRange()?.start ?? 0);
+  const videoEffectiveEndTime = computed(() => currentVideoRange()?.end ?? 0);
   const videoSamplingPlan = computed<VideoSamplingPlan>(() => {
     const currentSpec = spec.value;
     const minFrames = currentSpec.minFrames ?? 2;
@@ -143,6 +165,16 @@ export function useStickerMaker() {
   watch([mode, specKind, staticSource, frames, cropMode, background, paddingRatio, textOverlay], scheduleLivePreview, {
     deep: true,
     immediate: true,
+  });
+
+  watch([lastVideoFile, lastVideoMeta, videoStartTime, videoEndTime], scheduleVideoEndpointPreview);
+
+  onBeforeUnmount(() => {
+    if (previewTimer) window.clearTimeout(previewTimer);
+    if (videoEndpointPreviewTimer) window.clearTimeout(videoEndpointPreviewTimer);
+    cancelProcessing();
+    revokeLivePreview();
+    revokeVideoEndpointPreviews();
   });
 
   function setMode(next: "static" | "animated") {
@@ -252,29 +284,54 @@ export function useStickerMaker() {
       return;
     }
     exporting.value = true;
+    const controller = startProcessing("rendering-frames", frames.value.length, "正在渲染 GIF 帧");
     try {
       const currentSpec = spec.value;
-      const rendered = await Promise.all(frames.value.map(async (frame) => ({
-        canvas: await renderStickerFrame(frame.source, {
-          width: currentSpec.width,
-          height: currentSpec.height,
-          cropMode: cropMode.value,
-          background: background.value,
-          paddingRatio: paddingRatio.value,
-          textOverlay: textOverlay.value,
-        }),
-        delayMs: frame.delayMs,
-        name: frame.source.name,
-      })));
-      revokeGifExport();
-      gifExport.value = await encodeStickerGifNearSizeLimit(rendered, currentSpec, {
+      const rendered: StickerGifFrame[] = [];
+      for (const [index, frame] of frames.value.entries()) {
+        throwIfAborted(controller.signal);
+        updateProcessing("rendering-frames", index + 1, frames.value.length, `正在渲染第 ${index + 1}/${frames.value.length} 帧`);
+        rendered.push({
+          canvas: await renderStickerFrame(frame.source, {
+            width: currentSpec.width,
+            height: currentSpec.height,
+            cropMode: cropMode.value,
+            background: background.value,
+            paddingRatio: paddingRatio.value,
+            textOverlay: textOverlay.value,
+          }),
+          delayMs: frame.delayMs,
+          name: frame.source.name,
+        });
+      }
+      throwIfAborted(controller.signal);
+      updateProcessing("encoding-gif", 0, 1, "正在优化 GIF");
+      const nextGif = await encodeStickerGifNearSizeLimit(rendered, currentSpec, {
         preferredColors: 256,
         targetRatio: 0.98,
         transparentAlphaThreshold: 16,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          updateProcessing(
+            "encoding-gif",
+            progress.attempt,
+            progress.totalAttempts,
+            `GIF 优化尝试 ${progress.attempt}/${progress.totalAttempts}：${progress.frameCount} 帧，${progress.colors} 色`,
+          );
+        },
       });
+      revokeGifExport();
+      gifExport.value = nextGif;
       ElMessage.success(gifExport.value.validation.ok ? "GIF 已合成并自动优化。" : "GIF 已合成，但存在规格问题。");
+    } catch (error) {
+      if (isAbortError(error)) {
+        ElMessage.info("GIF 处理已取消。");
+      } else {
+        throw error;
+      }
     } finally {
       exporting.value = false;
+      finishProcessing(controller);
     }
   }
 
@@ -385,19 +442,27 @@ export function useStickerMaker() {
 
   async function extractFramesFromVideoFile(file: File, options: { refreshMeta: boolean }) {
     videoExtracting.value = true;
+    const controller = startProcessing("extracting-video", 1, "正在读取视频信息");
+    let extractedSources: StickerFrame[] = [];
     try {
       if (options.refreshMeta || !lastVideoMeta.value) {
         lastVideoMeta.value = await getVideoMetadata(file);
+        const nextRange = normalizeVideoRange(videoStartTime.value, videoEndTime.value, lastVideoMeta.value);
+        videoStartTime.value = nextRange.start;
+        videoEndTime.value = nextRange.end;
       }
-      const meta = lastVideoMeta.value;
-      const autoEndTime = videoEndTime.value > videoStartTime.value
-        ? videoEndTime.value
-        : Math.min(meta.duration, videoStartTime.value + 2.5);
+      const range = currentVideoRange();
       const plan = videoSamplingPlan.value;
+      updateProcessing("extracting-video", 0, plan.compliantFrameCount, "正在抽取视频帧");
       const extracted = await extractVideoFrames(file, {
         frameCount: plan.compliantFrameCount,
-        startTime: videoStartTime.value,
-        endTime: autoEndTime,
+        startTime: range?.start ?? videoStartTime.value,
+        endTime: range?.end ?? videoEndTime.value,
+      }, {
+        signal: controller.signal,
+        onProgress: (done, total, time) => {
+          updateProcessing("extracting-video", done, total, `已抽取 ${done}/${total} 帧 @ ${time.toFixed(2)}s`);
+        },
       });
       const nextFrames: StickerFrame[] = extracted.map((frame) => ({
         id: crypto.randomUUID(),
@@ -407,10 +472,12 @@ export function useStickerMaker() {
         sourceKind: "video" as const,
         sourceLabel: frame.source.name,
       }));
+      extractedSources = nextFrames;
 
       frames.value.forEach((frame) => clearSource(frame.source));
       sourceMode.value = "video";
       frames.value = nextFrames;
+      extractedSources = [];
       revokeGifExport();
       if (plan.wasClamped) {
         ElMessage.warning(`当前设置约需 ${plan.requestedFrameCount} 帧，已按工具上限 ${plan.toolMaxFrames} 帧抽取以避免浏览器卡顿和体积过大。`);
@@ -420,15 +487,72 @@ export function useStickerMaker() {
         ElMessage.success(`已按当前设置提取 ${nextFrames.length} 帧，约 ${plan.effectiveFps?.toFixed(1) ?? "-"}fps，可直接合成 GIF 或继续微调。`);
       }
     } catch (error) {
+      extractedSources.forEach((frame) => clearSource(frame.source));
+      if (isAbortError(error)) {
+        ElMessage.info("视频抽帧已取消。");
+      } else {
       ElMessage.error(error instanceof Error ? error.message : "视频抽帧失败。 ");
+      }
     } finally {
       videoExtracting.value = false;
+      finishProcessing(controller);
     }
   }
 
   function clearCurrentVideo() {
     lastVideoFile.value = null;
     lastVideoMeta.value = null;
+    revokeVideoEndpointPreviews();
+  }
+
+  function setVideoRange(range: [number, number]) {
+    const nextRange = normalizeVideoRange(range[0], range[1], lastVideoMeta.value);
+    videoStartTime.value = nextRange.start;
+    videoEndTime.value = nextRange.end;
+  }
+
+  function currentVideoRange() {
+    if (!lastVideoMeta.value) return null;
+    return normalizeVideoRange(videoStartTime.value, videoEndTime.value, lastVideoMeta.value);
+  }
+
+  function scheduleVideoEndpointPreview() {
+    if (videoEndpointPreviewTimer) window.clearTimeout(videoEndpointPreviewTimer);
+    videoEndpointPreviewTimer = window.setTimeout(updateVideoEndpointPreview, 180);
+  }
+
+  async function updateVideoEndpointPreview() {
+    const token = ++videoEndpointPreviewToken;
+    const file = lastVideoFile.value;
+    const range = currentVideoRange();
+    if (!file || !range) {
+      revokeVideoEndpointPreviews();
+      return;
+    }
+
+    try {
+      const [startPreview, endPreview] = await Promise.all([
+        createVideoFramePreview(file, range.start),
+        createVideoFramePreview(file, range.end),
+      ]);
+      if (token === videoEndpointPreviewToken) {
+        revokeVideoEndpointPreviews();
+        videoStartPreviewUrl.value = startPreview.src;
+        videoEndPreviewUrl.value = endPreview.src;
+      } else {
+        clearSource(startPreview);
+        clearSource(endPreview);
+      }
+    } catch {
+      if (token === videoEndpointPreviewToken) revokeVideoEndpointPreviews();
+    }
+  }
+
+  function revokeVideoEndpointPreviews() {
+    if (videoStartPreviewUrl.value?.startsWith("blob:")) URL.revokeObjectURL(videoStartPreviewUrl.value);
+    if (videoEndPreviewUrl.value?.startsWith("blob:")) URL.revokeObjectURL(videoEndPreviewUrl.value);
+    videoStartPreviewUrl.value = null;
+    videoEndPreviewUrl.value = null;
   }
 
   function scheduleLivePreview() {
@@ -448,6 +572,30 @@ export function useStickerMaker() {
     livePreviewLoading.value = true;
     try {
       const currentSpec = spec.value;
+      if (mode.value === "animated") {
+        const previewFrames = frames.value.slice(0, ANIMATED_PREVIEW_FRAME_LIMIT);
+        const urls: string[] = [];
+        for (const frame of previewFrames) {
+          const canvas = await renderStickerFrame(frame.source, {
+            width: currentSpec.width,
+            height: currentSpec.height,
+            cropMode: cropMode.value,
+            background: background.value,
+            paddingRatio: paddingRatio.value,
+            textOverlay: textOverlay.value,
+          });
+          urls.push(await canvasToObjectUrl(canvas));
+          if (token !== previewToken) break;
+        }
+        if (token === previewToken) {
+          revokeLivePreview();
+          animatedPreviewFrames.value = urls;
+          animatedPreviewDelays.value = previewFrames.map((frame) => frame.delayMs);
+        } else {
+          urls.forEach((url) => URL.revokeObjectURL(url));
+        }
+        return;
+      }
       const canvas = await renderStickerFrame(source, {
         width: currentSpec.width,
         height: currentSpec.height,
@@ -460,6 +608,8 @@ export function useStickerMaker() {
       if (token === previewToken) {
         revokeLivePreview();
         livePreviewUrl.value = nextUrl;
+        animatedPreviewFrames.value = [];
+        animatedPreviewDelays.value = [];
       } else {
         URL.revokeObjectURL(nextUrl);
       }
@@ -478,6 +628,15 @@ export function useStickerMaker() {
   function revokeLivePreview() {
     if (livePreviewUrl.value?.startsWith("blob:")) URL.revokeObjectURL(livePreviewUrl.value);
     livePreviewUrl.value = null;
+    revokeAnimatedPreview();
+  }
+
+  function revokeAnimatedPreview() {
+    animatedPreviewFrames.value.forEach((url) => {
+      if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+    });
+    animatedPreviewFrames.value = [];
+    animatedPreviewDelays.value = [];
   }
 
   function gifExportBaseName() {
@@ -505,6 +664,30 @@ export function useStickerMaker() {
     setAllDelay(120);
   }
 
+  function startProcessing(stage: StickerProcessingStage, total: number, text: string) {
+    processingController?.abort();
+    const controller = new AbortController();
+    processingController = controller;
+    updateProcessing(stage, 0, total, text);
+    return controller;
+  }
+
+  function updateProcessing(stage: StickerProcessingStage, current: number, total: number, text: string) {
+    processingStage.value = stage;
+    processingProgress.value = { current, total: Math.max(1, total), text };
+  }
+
+  function finishProcessing(controller: AbortController) {
+    if (processingController !== controller) return;
+    processingController = null;
+    processingStage.value = "idle";
+    processingProgress.value = null;
+  }
+
+  function cancelProcessing() {
+    processingController?.abort();
+  }
+
   return {
     mode,
     specKind,
@@ -521,7 +704,11 @@ export function useStickerMaker() {
     videoSamplingPlan,
     videoStartTime,
     videoEndTime,
+    videoEffectiveStartTime,
+    videoEffectiveEndTime,
     videoExtracting,
+    videoStartPreviewUrl,
+    videoEndPreviewUrl,
     lastVideoMeta,
     canReextractVideo,
     sourceMode,
@@ -535,13 +722,21 @@ export function useStickerMaker() {
     staticExport,
     gifExport,
     livePreviewUrl,
+    animatedPreviewFrames,
+    animatedPreviewDelays,
+    animatedPreviewPlaying,
     livePreviewLoading,
+    processingStage,
+    processingProgress,
+    canCancelProcessing,
     loading,
     exporting,
     hasSource,
     hasFrames,
     gifExportBaseName,
     applyVideoPreset,
+    setVideoRange,
+    cancelProcessing,
     reextractCurrentVideo,
     setMode,
     addFiles,
@@ -581,9 +776,17 @@ function slugifyFileBase(fileName: string | undefined, fallback: string, maxLen 
 
 function selectedVideoDuration(meta: StickerVideoMetadata | null, startValue: number, endValue: number) {
   if (!meta?.duration) return null;
-  const start = clampNumber(startValue, 0, meta.duration);
-  const end = endValue > start ? clampNumber(endValue, start, meta.duration) : Math.min(meta.duration, start + 2.5);
+  const { start, end } = normalizeVideoRange(startValue, endValue, meta);
   return Math.max(0.01, end - start);
+}
+
+function normalizeVideoRange(startValue: number, endValue: number, meta: StickerVideoMetadata | null) {
+  const duration = Math.max(0.01, meta?.duration ?? 0.01);
+  const start = clampNumber(startValue, 0, Math.max(0, duration - 0.01));
+  const fallbackEnd = Math.min(duration, start + 2.5);
+  const rawEnd = endValue > start ? endValue : fallbackEnd;
+  const end = clampNumber(rawEnd, Math.min(duration, start + 0.01), duration);
+  return { start, end };
 }
 
 function buildVideoSamplingTip(
@@ -615,4 +818,13 @@ function clampNumber(value: number, min: number, max: number) {
 
 function clampInt(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw new DOMException("Operation cancelled", "AbortError");
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }

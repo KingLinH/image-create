@@ -1,11 +1,10 @@
 <script setup lang="ts">
 defineOptions({ name: "StickerView" });
-import { computed } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useStickerMaker } from "@/composables/useStickerMaker";
 import { triggerBlobDownload } from "@/core/storage";
 import { buildStickerExportName } from "@/core/stickerAnimation";
-import { formatTimestamp } from "@/core/fileNames";
 import { getStickerSpec, type StickerValidationResult } from "@/core/stickerSpecs";
 import StickerCanvasEditor from "@/components/sticker/StickerCanvasEditor.vue";
 import StickerExportPanel from "@/components/sticker/StickerExportPanel.vue";
@@ -22,16 +21,46 @@ const currentValidation = computed(() => {
 });
 
 const livePreviewList = computed(() => maker.livePreviewUrl.value ? [maker.livePreviewUrl.value] : []);
+const animatedPreviewIndex = ref(0);
+let animatedPreviewTimer: number | null = null;
+const hasOptimizedGifPreview = computed(() => maker.mode.value === "animated" && Boolean(maker.gifExport.value?.previewUrl));
+const currentAnimatedPreviewUrl = computed(() => maker.gifExport.value?.previewUrl ?? maker.animatedPreviewFrames.value[animatedPreviewIndex.value] ?? null);
+const hasLivePreview = computed(() => Boolean(maker.livePreviewUrl.value || currentAnimatedPreviewUrl.value || maker.livePreviewLoading.value));
 const gifExportFileName = computed(() => buildStickerExportName(maker.gifExportBaseName(), getStickerSpec("animated-main")));
-const hasInvalidExport = computed(() => Boolean(
-  maker.staticExport.value && !maker.staticExport.value.validation.ok
-  || maker.gifExport.value && !maker.gifExport.value.validation.ok,
-));
+watch([
+  maker.animatedPreviewFrames,
+  maker.animatedPreviewDelays,
+  maker.animatedPreviewPlaying,
+  maker.gifExport,
+], scheduleAnimatedPreviewPlayback, { deep: true });
+
+onBeforeUnmount(() => {
+  if (animatedPreviewTimer) window.clearTimeout(animatedPreviewTimer);
+});
+
+function scheduleAnimatedPreviewPlayback() {
+  if (animatedPreviewTimer) window.clearTimeout(animatedPreviewTimer);
+  if (hasOptimizedGifPreview.value) {
+    animatedPreviewIndex.value = 0;
+    return;
+  }
+  const frames = maker.animatedPreviewFrames.value;
+  if (!maker.animatedPreviewPlaying.value || frames.length <= 1) {
+    animatedPreviewIndex.value = 0;
+    return;
+  }
+  if (animatedPreviewIndex.value >= frames.length) animatedPreviewIndex.value = 0;
+  const delay = Math.max(40, maker.animatedPreviewDelays.value[animatedPreviewIndex.value] ?? maker.defaultDelayMs.value);
+  animatedPreviewTimer = window.setTimeout(() => {
+    animatedPreviewIndex.value = (animatedPreviewIndex.value + 1) % frames.length;
+    scheduleAnimatedPreviewPlayback();
+  }, delay);
+}
 
 function warnInvalidDownload(validation: StickerValidationResult) {
   if (validation.ok) return false;
   const errors = validation.issues.filter((issue) => issue.level === "error");
-  ElMessage.error(errors[0]?.message ?? "当前结果不符合投稿规格，请调整素材后重新处理。 ");
+  ElMessage.error(errors[0]?.message ?? "当前结果不符合规格，请调整素材后重新处理。");
   return true;
 }
 
@@ -57,16 +86,6 @@ function downloadGifSticker() {
   ElMessage.success("GIF 表情已开始下载。");
 }
 
-async function downloadZip() {
-  if (hasInvalidExport.value) {
-    ElMessage.error("当前存在不符合规格的表情，请按校验提示调整后重新处理/合成。 ");
-    return;
-  }
-  const blob = await maker.buildPackage();
-  if (!blob) return;
-  triggerBlobDownload(blob, `${formatTimestamp(new Date())}_wechat-stickers.zip`);
-  ElMessage.success("投稿 ZIP 已生成。请按微信官方后台要求复核后上传。");
-}
 </script>
 
 <template>
@@ -76,7 +95,7 @@ async function downloadZip() {
       <div>
         <p class="panel-title">微信表情包制作</p>
         <p class="muted">
-          上传自己的图片或视频素材，工具会帮你裁剪、适配、校验并导出微信表情投稿文件；AI 生成仅作为可选素材来源。
+          上传自己的图片或视频素材，工具会帮你裁剪、适配、校验并导出微信表情文件；AI 生成仅作为可选素材来源。
         </p>
       </div>
       <el-radio-group :model-value="maker.mode.value" @update:model-value="maker.setMode($event as 'static' | 'animated')">
@@ -99,6 +118,10 @@ async function downloadZip() {
         :video-sampling-plan="maker.videoSamplingPlan.value"
         :video-start-time="maker.videoStartTime.value"
         :video-end-time="maker.videoEndTime.value"
+        :video-effective-start-time="maker.videoEffectiveStartTime.value"
+        :video-effective-end-time="maker.videoEffectiveEndTime.value"
+        :video-start-preview="maker.videoStartPreviewUrl.value"
+        :video-end-preview="maker.videoEndPreviewUrl.value"
         :default-delay="maker.defaultDelayMs.value"
         :tool-max-frames="maker.videoSamplingPlan.value.toolMaxFrames"
         :last-video-meta="maker.lastVideoMeta.value"
@@ -108,6 +131,7 @@ async function downloadZip() {
         @update-video-sampling-mode="maker.videoSamplingMode.value = $event"
         @update-video-start-time="maker.videoStartTime.value = $event"
         @update-video-end-time="maker.videoEndTime.value = $event"
+        @update-video-range="maker.setVideoRange"
         @update-default-delay="maker.setAllDelay"
         @apply-video-preset="maker.applyVideoPreset"
         @reextract-video="maker.reextractCurrentVideo"
@@ -131,7 +155,7 @@ async function downloadZip() {
     </div>
 
     <div class="panel">
-      <p class="panel-title">2. 选择投稿规格</p>
+      <p class="panel-title">2. 选择导出规格</p>
       <StickerSpecSelector v-model="maker.specKind.value" />
       <el-alert class="spec-note" type="warning" :closable="false" show-icon :title="maker.spec.value.sourceNote" />
     </div>
@@ -175,11 +199,14 @@ async function downloadZip() {
         :static-optimization="maker.staticExport.value?.optimization"
         :gif-optimization="maker.gifExport.value?.optimization"
         :exporting="maker.exporting.value"
+        :processing-stage="maker.processingStage.value"
+        :processing-progress="maker.processingProgress.value"
+        :can-cancel="maker.canCancelProcessing.value"
         @static="maker.renderStatic"
         @gif="maker.exportGif"
+        @cancel="maker.cancelProcessing"
         @download-static="downloadStaticSticker"
         @download-gif="downloadGifSticker"
-        @zip="downloadZip"
       />
       <div class="validation-block">
         <StickerValidationPanel :result="currentValidation" />
@@ -187,12 +214,12 @@ async function downloadZip() {
     </div>
     </main>
 
-    <aside v-if="maker.livePreviewUrl.value || maker.livePreviewLoading.value" class="preview-rail">
+    <aside v-if="hasLivePreview" class="preview-rail">
       <div class="floating-live-preview">
-        <p class="floating-preview-title">最终效果预览</p>
+        <p class="floating-preview-title">效果预览</p>
         <div v-loading="maker.livePreviewLoading.value" class="floating-preview-box">
           <el-image
-            v-if="maker.livePreviewUrl.value"
+            v-if="maker.mode.value === 'static' && maker.livePreviewUrl.value"
             class="floating-preview-image"
             :src="maker.livePreviewUrl.value"
             fit="contain"
@@ -200,9 +227,17 @@ async function downloadZip() {
             preview-teleported
             hide-on-click-modal
           />
+          <img
+            v-else-if="currentAnimatedPreviewUrl"
+            class="floating-preview-image"
+            :src="currentAnimatedPreviewUrl"
+            alt=""
+          />
           <el-empty v-else description="上传素材后可实时预览" :image-size="80" />
         </div>
-        <p class="floating-preview-help">预览复用最终导出逻辑；动态 GIF 显示第一帧。</p>
+        <p class="floating-preview-help">
+          {{ hasOptimizedGifPreview ? '当前显示已合成的真实 GIF' : maker.mode.value === 'animated' ? `合成前动态预览 ${animatedPreviewIndex + 1}/${maker.animatedPreviewFrames.value.length || 1}` : '预览复用最终导出逻辑' }}
+        </p>
       </div>
     </aside>
   </div>
@@ -275,6 +310,7 @@ async function downloadZip() {
 .floating-preview-image {
   width: 200px;
   height: 200px;
+  object-fit: contain;
   cursor: zoom-in;
 }
 .floating-preview-help {

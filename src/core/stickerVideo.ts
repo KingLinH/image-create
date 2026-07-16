@@ -18,6 +18,11 @@ export type StickerVideoExtractOptions = {
   maxDuration?: number;
 };
 
+export type StickerVideoExtractCallbacks = {
+  signal?: AbortSignal;
+  onProgress?: (done: number, total: number, time: number) => void;
+};
+
 const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov", ".m4v"];
 
 export function isVideoFile(file: File): boolean {
@@ -41,9 +46,11 @@ export async function getVideoMetadata(file: File): Promise<StickerVideoMetadata
 export async function extractVideoFrames(
   file: File,
   options: StickerVideoExtractOptions,
+  callbacks: StickerVideoExtractCallbacks = {},
 ): Promise<StickerVideoFrame[]> {
   const { video, revoke } = await loadVideo(file);
   try {
+    throwIfAborted(callbacks.signal);
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     if (!duration || !video.videoWidth || !video.videoHeight) {
       throw new Error("无法读取视频时长或尺寸，请换一个浏览器可解码的视频文件。");
@@ -66,10 +73,13 @@ export async function extractVideoFrames(
     if (!ctx) throw new Error("浏览器不支持 Canvas。 ");
 
     const frames: StickerVideoFrame[] = [];
-    for (const time of times) {
+    for (const [index, time] of times.entries()) {
+      throwIfAborted(callbacks.signal);
       await seekVideo(video, time);
+      throwIfAborted(callbacks.signal);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const blob = await canvasToPngBlob(canvas);
+      throwIfAborted(callbacks.signal);
       const src = URL.createObjectURL(blob);
       const labelTime = time.toFixed(2);
       frames.push({
@@ -80,8 +90,38 @@ export async function extractVideoFrames(
           revoke: () => URL.revokeObjectURL(src),
         },
       });
+      callbacks.onProgress?.(index + 1, times.length, time);
     }
     return frames;
+  } finally {
+    revoke();
+  }
+}
+
+export async function createVideoFramePreview(file: File, time: number): Promise<StickerImageSource> {
+  const { video, revoke } = await loadVideo(file);
+  try {
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    if (!duration || !video.videoWidth || !video.videoHeight) {
+      throw new Error("Cannot read video metadata.");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas is not supported.");
+
+    const targetTime = clamp(time, 0, Math.max(0, duration - 0.001));
+    await seekVideo(video, targetTime);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await canvasToPngBlob(canvas);
+    const src = URL.createObjectURL(blob);
+    return {
+      src,
+      name: `${file.name} @ ${targetTime.toFixed(2)}s`,
+      revoke: () => URL.revokeObjectURL(src),
+    };
   } finally {
     revoke();
   }
@@ -152,4 +192,9 @@ function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw new DOMException("Operation cancelled", "AbortError");
 }
