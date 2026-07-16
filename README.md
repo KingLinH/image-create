@@ -1,117 +1,149 @@
-# 图创（ImageCreate）
+# 图创 ImageCreate
 
-参考 [KDB-Wind/gpt-image-2-studio](https://github.com/KDB-Wind/gpt-image-2-studio)，用 **Vue 3 + Vite + TypeScript + Element Plus** 重写的轻量 AI 生图与海报工作台。
+参考 [KDB-Wind/gpt-image-2-studio](https://github.com/KDB-Wind/gpt-image-2-studio)，使用 **Vue 3 + Vite + TypeScript + Element Plus** 重写的轻量 AI 生图、海报和表情制作工作台。
 
-> 纯浏览器、无后端。填入你自己的 `Base URL` 与 `API Key`，所有请求从浏览器直接发往你配置的 OpenAI 兼容模型服务。密钥、历史与素材仅保存在当前浏览器本地。
+这是一个纯浏览器、无后端的工具。填写自己的 `Base URL` 和 `API Key` 后，请求会从浏览器直接发往你配置的 OpenAI 兼容模型服务；密钥、历史记录和素材仅保存在当前浏览器本地。
 
-**在线体验（GitHub Pages）**：<https://kinglinh.github.io/image-create/>
+在线体验：<https://kinglinh.github.io/image-create/>
 
 ## 功能
 
-> 导航顺序：**海报**（做海报的主入口）/ 单图 / 批量 / 历史 / 设置。首页默认进入「海报」。
+导航包含：海报、单图、批量、表情、历史、设置。
 
-### 🎨 海报工作台（迭代 3 新增，做海报首选）
-- **海报类型选择器**：产品电商 / 活动营销 / 社交新媒体 / 通知招聘 / 节日主题，选中即套用该类型推荐尺寸 + 默认构图 + 示例模板
-- **海报提示词生成器**：填 主题/主色调/标题/其他文案 → 一键组装成结构化提示词
-- **构图预设标签**：顶部留白放标题 / 居中主体 / 三分法 / 对称 / 满版冲击，点击追加
-- **项目/合集归类**：给生成打项目标签（如「双十一2026」），历史页按项目筛选，适合系列海报归档
-- 复用风格预设标签、提示词片段库、尺寸快选
+### 海报工作台
 
-### 🖼️ 素材库（图生图素材）
-- 上传 Logo / 产品图 / 品牌元素等图片，**持久化到本地**（IndexedDB），自动压缩
-- 海报 / 单图 / 批量三处都能打开素材库，**一键加为图生图参考图**，免去重复上传
-- 海报页同步新增图生图（参考图）入口
+- 按产品电商、活动营销、社交媒体、通知招聘、节日主题等类型生成结构化海报提示词。
+- 支持主题、主色调、标题和补充文案组合生成提示词。
+- 提供构图预设、风格预设、尺寸快捷选择和项目归类。
+- 支持素材库引用图，用于 Logo、产品图和品牌元素复用。
 
-### 单图
-- 文生图，支持「用文字模型优化提示词」与结果预览/下载
-- **风格预设快捷标签**：一键追加 写实摄影 / 动漫 / 水彩 / 赛博朋克 等风格修饰
-- **提示词片段库**：保存常用提示词，搜索 + 一键插入（本地持久化）
-- 图生图：上传参考图走 `/images/edits`（multipart）；参考图上传时**自动压缩**（≤1280px / JPEG q85），基本不影响质量、降低大图上传失败
-- **基于结果迭代优化**：对结果不满意点「以此图优化」→ 该图自动转为参考图 → 微调提示词 → 生成（自动走图生图，在原图基础上优化）；也可「重新生成」换一轮
+### 单图生成
+
+- 支持文生图和图生图。
+- 支持使用文本模型优化提示词。
+- 支持风格预设、提示词片段库、结果预览和原图下载。
+- 支持基于生成结果继续迭代优化。
 
 ### 批量生图
-- 同一提示词生成多张（可加「风格锁定」）
-- 自定义多条提示词（最多 20 条）
-- **批量粘贴导入**：每行一条提示词，秒建任务列表
-- **✨ AI 提示词拆分**：输入主提示词，调用文字模型自动拆成多条可编辑子任务（通用 / 风格统一 / 系列组图 三种模板，自带数量推荐）
-- 并发队列、间隔控制、失败自动重试、auth/cost_risk 自动暂停、可取消
 
-### 历史
-- 按日期/批次分组，缩略图预览、复用提示词、下载 **原图**、删除
-- **收藏标星**：⭐ 收藏好图，「仅看收藏」一键筛选
-- **并排对比**：对比模式下勾选 ≤6 张，原图并排 + 各自提示词，挑最佳/下载
-- **数据看板**：总数 / 成功率 / 平均耗时 / 本月 / 收藏数，按项目、按模型分布
-- **导出 / 导入**：历史或收藏导出为 JSON 备份，可导入恢复（仅元数据）
-- 原图与缩略图存 IndexedDB，localStorage 仅留元数据（不爆 5MB 配额）
+- 支持同一提示词生成多张图片。
+- 支持批量粘贴多条提示词，最多 20 条。
+- 支持 AI 拆分主提示词为多条可编辑子任务。
+- 支持并发队列、间隔控制、失败重试、暂停和取消。
 
-### 其它
-- **暗色模式**：跟随系统 / 浅色 / 深色 一键切换
-- 全局错误兜底（渲染错误与未处理 Promise 不再静默丢失）
-- 设置：Base URL / API Key / 文字模型 / 图片模型 / 超时 / 尺寸 / 数量 / 质量 / 格式 / 压缩 / 批量默认值，支持「测试文字模型」「测试图片模型」连通性
+### 表情制作
+
+- 支持静态表情和动态 GIF 两种模式。
+- 静态模式可上传 PNG/JPEG/WebP，按当前规格裁剪、补边、压缩、校验后下载。
+- 动态模式可上传多张图片或视频素材，生成 240 x 240 GIF 表情。
+- 视频素材支持区间滑块、起止帧预览、预计帧数、有效 FPS 和当前片段重新抽帧。
+- 调整视频片段后，需要点击“按当前片段重新抽帧”才会更新帧列表，避免拖动滑块时频繁抽帧导致卡顿。
+- 支持帧列表管理，包括调整顺序、删除帧、单帧延迟和批量延迟。
+- 支持本地叠字，文字会绘制到静态图或 GIF 的每一帧，不会发送给 AI。
+- 右侧预览在合成前显示帧轮播预览；合成后优先显示真实导出的 GIF，和下载结果保持一致。
+- GIF 合成会自动尝试降色和必要的抽帧以贴近 500KB 限制。
+- 视频抽帧、帧渲染和 GIF 压缩都有进度提示，并支持取消。
+- 当前主流程是“合成 GIF -> 下载 GIF 表情”，不再提供投稿 ZIP 按钮。
+
+### 素材库
+
+- 支持上传 Logo、产品图、品牌元素等图片素材。
+- 素材持久化保存在浏览器 IndexedDB。
+- 海报、单图和批量模块都可以打开素材库并将素材作为图生图参考图。
+
+### 历史记录
+
+- 按日期和批次分组展示生成结果。
+- 支持缩略图预览、复用提示词、下载原图、删除记录。
+- 支持收藏、仅看收藏、并排对比和数据看板。
+- 支持导出/导入历史元数据备份。
+
+### 设置
+
+- 配置 Base URL、API Key、文本模型、图片模型、超时、尺寸、数量、质量、格式和压缩参数。
+- 支持测试文本模型和图片模型连通性。
+- 支持浅色、深色和跟随系统主题。
 
 ## 快速开始
 
 ```bash
 npm install
 npm run dev      # 打开 http://localhost:5173
-npm run build    # 产出 dist/
+npm run build    # 生成 dist/
 npm run preview  # 预览构建产物
 ```
 
 首次使用：
 
-1. 进入「设置」，填写 `Base URL`、`API Key`、文字模型名、图片模型名。
-2. 把超时设到 ≥ 180 秒（生图常需 1~3 分钟）。
-3. 点「测试文字模型」「测试图片模型」验证连通，再开始生成。
+1. 进入“设置”，填写 `Base URL`、`API Key`、文本模型名和图片模型名。
+2. 如果生图耗时较长，建议把超时设置到 180 秒或更高。
+3. 点击“测试文本模型”和“测试图片模型”验证连通性。
+4. 回到海报、单图、批量或表情模块开始制作。
+
+## 表情制作流程
+
+静态表情：
+
+1. 进入“表情”，选择“静态表情”。
+2. 上传一张图片，选择导出规格。
+3. 调整裁切模式、背景、边距和叠字。
+4. 点击“处理静态表情”。
+5. 校验通过后点击“下载静态表情”。
+
+动态 GIF：
+
+1. 进入“表情”，选择“动态 GIF”。
+2. 上传多张图片，或上传一段视频。
+3. 如果上传视频，先用区间滑块选中动作最集中的片段。
+4. 点击“按当前片段重新抽帧”，更新下方帧列表。
+5. 按需调整帧顺序、删除无效帧或修改帧延迟。
+6. 右侧先看合成前动态预览，确认节奏和叠字位置。
+7. 点击“合成 GIF”，等待压缩和校验。
+8. 右侧预览会切换为真实 GIF；确认后点击“下载 GIF 表情”。
 
 ## 技术栈
 
-- Vue 3（Composition API / `<script setup>`）
-- Vite、TypeScript
-- Element Plus（按需引入）、Vue Router（hash 模式）、Pinia（localStorage 持久化）
-- IndexedDB（`idb-keyval` 存原图/缩略图）
-- `unplugin-auto-import` / `unplugin-vue-components`（按需引入与打包瘦身）
+- Vue 3 Composition API / `<script setup>`
+- Vite
+- TypeScript
+- Element Plus
+- Vue Router hash 模式
+- Pinia
+- IndexedDB / `idb-keyval`
+- `gifenc` 用于 GIF 编码和降色
+- `fflate` 用于底层 ZIP 能力
+- `unplugin-auto-import` / `unplugin-vue-components`
 
 ## 目录结构
 
-```
+```text
 src/
-├── core/        # 纯逻辑（无 Vue 依赖），移植自参考项目
-│   ├── api.ts            # OpenAI 兼容请求（responses→chat/completions 回退、images/generations、images/edits）
-│   ├── config.ts         # 配置类型/默认值/校验/normalizeBaseUrl
-│   ├── imageOptions.ts   # 尺寸/质量/格式与尺寸校验
-│   ├── batch.ts          # 并发队列/重试/暂停/取消
-│   ├── history.ts        # 记录类型与分组
-│   ├── historyStats.ts   # 数据看板统计（纯函数）
-│   ├── fileNames.ts      # 文件名/日期目录
-│   ├── providerErrors.ts # 错误分类（决定重试/暂停）
-│   ├── promptSplitter.ts # AI 提示词拆分
-│   ├── posterTypes.ts    # 海报类型/构图/模板预设
-│   ├── stylePresets.ts / compositionPresets.ts  # 风格/构图预设
-│   ├── imageStore.ts / assetStore.ts  # 历史/素材 IndexedDB
-│   └── storage.ts        # localStorage、缩略图、下载、参考图压缩、目录授权
-├── stores/      # Pinia：config、history、snippets、projects、assets
-├── composables/ # useImageGeneration、useBatch、useTheme、promptTransfer
-├── components/  # SnippetDrawer、BulkPasteDialog、CompareDialog、StatsPanel、AssetsDrawer、PosterBuilder、ProjectSelect
-├── views/       # PosterView、SingleView、BatchView、HistoryView、SettingsView
-└── App.vue / main.ts / router/
+├─ core/             # 纯逻辑：API、配置、历史、批量、表情画布/GIF/视频处理
+├─ stores/           # Pinia：配置、历史、提示词片段、项目、素材
+├─ composables/      # 组合逻辑：生图、批量、主题、表情制作
+├─ components/       # 通用组件与表情子组件
+├─ views/            # 海报、单图、批量、表情、历史、设置页面
+├─ router/           # 路由
+├─ App.vue
+└─ main.ts
 ```
 
-## API 契约（OpenAI 兼容）
+## API 契约
 
-| 用途 | 方法 & 路径 | 说明 |
+| 用途 | 方法和路径 | 说明 |
 | --- | --- | --- |
-| 文字模型 | `POST {baseUrl}/responses` | body `{ model, input: [{role, content}] }`；遇 404/405/501 等错误自动回退 `/chat/completions` |
-| 文生图 | `POST {baseUrl}/images/generations` | JSON：`model/prompt/size/quality/n/output_format/output_compression?` |
-| 图生图 | `POST {baseUrl}/images/edits` | FormData：同上字段 + `image[]`（每张参考图） |
+| 文本模型 | `POST {baseUrl}/responses` | body 为 `{ model, input: [{ role, content }] }`，失败时回退到 `/chat/completions` |
+| 文生图 | `POST {baseUrl}/images/generations` | JSON 参数包含 `model`、`prompt`、`size`、`quality`、`n`、`output_format`、`output_compression` |
+| 图生图 | `POST {baseUrl}/images/edits` | FormData 参数同上，并附带 `image[]` 参考图 |
 
-所有请求带 `Authorization: Bearer {apiKey}`；`baseUrl` 自动补齐 `/v1`。图片响应解析 `data[].b64_json | base64 | image_base64`，缺则取 `url | image_url`。
+所有请求都会带上 `Authorization: Bearer {apiKey}`。`baseUrl` 会自动补齐 `/v1`。图片响应会优先解析 `data[].b64_json | base64 | image_base64`，缺失时读取 `url | image_url`。
 
 ## 注意事项
 
-- 纯浏览器能否直连模型服务，取决于供应商是否允许 CORS。出现 CORS 错误时，请换支持浏览器访问的供应商或自建代理。
-- 历史/素材的**原图与缩略图持久化在浏览器 IndexedDB**，元数据存 `localStorage`；浏览器清理站点数据可能清掉 IndexedDB，重要图片建议定期「下载」或用历史页「导出」备份。
-- 切勿把真实 `API Key` 提交到代码仓库、Issue 或截图。
+- 纯浏览器直连模型服务是否可用，取决于供应商是否允许 CORS。
+- 历史记录和素材保存在浏览器本地，清理站点数据可能会删除 IndexedDB 内容。
+- 不要把真实 `API Key` 提交到代码仓库、Issue 或截图中。
+- 表情规格以工具内校验为辅助，正式发布前仍建议按微信表情开放平台当前后台要求复核。
 
 ## License
 
